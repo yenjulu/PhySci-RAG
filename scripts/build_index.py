@@ -29,12 +29,17 @@ def main() -> None:
     action="store_true",
     help="Only ingest source files already present in data/files/.",
   )
+  parser.add_argument(
+    "--no-ocr",
+    action="store_true",
+    help="Skip OCR when indexing image figures.",
+  )
   args = parser.parse_args()
 
   if not args.skip_download:
     download_files(limit=args.download_limit, pdf_only=args.pdf_only)
 
-  chunks = ingest_local_files(include_images=not args.pdf_only)
+  chunks = ingest_local_files(include_images=not args.pdf_only, use_ocr=not args.no_ocr)
   text_count = sum(1 for chunk in chunks if chunk.content_type == "text")
   image_count = sum(1 for chunk in chunks if chunk.content_type == "image")
   print(

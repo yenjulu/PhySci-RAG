@@ -5,7 +5,7 @@ from pathlib import Path
 from pypdf import PdfReader
 
 from .benchmark import file_to_record_ids, load_benchmark
-from .config import CHUNK_OVERLAP, CHUNK_SIZE, FILES_DIR, IMAGE_EXTENSIONS
+from .config import CHUNK_OVERLAP, CHUNK_SIZE, FILES_DIR, IMAGE_EXTENSIONS, OCR_ENABLED
 
 
 @dataclass(frozen=True)
@@ -81,19 +81,33 @@ def chunk_pdf(
     return chunks
 
 
-def _image_search_text(source_file: str, record_ids: list[str]) -> str:
+def _image_search_text(source_file: str, record_ids: list[str], ocr_text: str = "") -> str:
     ids = ", ".join(record_ids) if record_ids else "unlinked"
+    header = f"[image] {source_file} | benchmark records {ids}"
+    if ocr_text:
+        return f"{header}\n{ocr_text}"
     return (
-        f"[image] scientific figure {source_file} "
-        f"benchmark records {ids} microscopy diffraction spectroscopy structure"
+        f"{header}\n"
+        "scientific figure microscopy diffraction spectroscopy structure"
     )
 
 
-def chunk_image(path: Path, record_ids: list[str], chunk_index: int) -> DocumentChunk:
+def chunk_image(
+    path: Path,
+    record_ids: list[str],
+    chunk_index: int,
+    use_ocr: bool = OCR_ENABLED,
+) -> DocumentChunk:
     source_file = path.name
+    ocr_text = ""
+    if use_ocr:
+        from .ocr import extract_image_text
+
+        ocr_text = extract_image_text(path)
+
     return DocumentChunk(
         chunk_id=f"{source_file}::img::c{chunk_index}",
-        text=_image_search_text(source_file, record_ids),
+        text=_image_search_text(source_file, record_ids, ocr_text),
         source_file=source_file,
         page=None,
         record_ids=record_ids,
@@ -105,6 +119,7 @@ def chunk_image(path: Path, record_ids: list[str], chunk_index: int) -> Document
 def ingest_local_files(
     files_dir: Path = FILES_DIR,
     include_images: bool = True,
+    use_ocr: bool = OCR_ENABLED,
 ) -> list[DocumentChunk]:
     records = load_benchmark()
     mapping = file_to_record_ids(records)
@@ -126,7 +141,7 @@ def ingest_local_files(
         )
         for path in image_paths:
             record_ids = mapping.get(path.name, [])
-            all_chunks.append(chunk_image(path, record_ids, chunk_counter))
+            all_chunks.append(chunk_image(path, record_ids, chunk_counter, use_ocr=use_ocr))
             chunk_counter += 1
 
     return all_chunks

@@ -120,9 +120,10 @@ data/
 
 ## Notes
 
-- Image figures (`.png`/`.jpg`) are indexed with CLIP embeddings for retrieval; PDF passages use MiniLM text embeddings.
+- Image figures (`.png`/`.jpg`) are indexed with CLIP embeddings plus OCR caption text (RapidOCR).
 - Rebuild the index after pulling this change: `py -3 scripts/build_index.py --skip-download` (if files are already downloaded).
-- LLM generation still receives image metadata text, not raw pixels, unless you extend the generator with a vision model.
+- Use `--no-ocr` on `build_index.py` to skip OCR during image ingestion.
+- LLM generation still receives extracted caption text for images, not raw pixels, unless you extend the generator with a vision model.
 - Hybrid retrieval uses `sentence-transformers/all-MiniLM-L6-v2` for text, `sentence-transformers/clip-ViT-B-32` for images, plus BM25 reranking.
 - PhySciBench is for academic research only. See the dataset card for license restrictions.
 
