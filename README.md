@@ -145,6 +145,43 @@ Benchmark figure images (`.png`, `.jpg`) are not read as pixels by the LLM. Inst
 
 Disable OCR at build time with `--no-ocr` if needed.
 
+## Retrieval scoring
+
+Each retrieved chunk gets a **hybrid score** (see `physci_rag/store.py`):
+
+```
+combined = 0.65 × dense + 0.35 × sparse
+```
+
+(`HYBRID_ALPHA = 0.65` in `physci_rag/config.py`)
+
+When using `--id`, chunks **not** listed in the benchmark record's `files` field are penalized to `min_score - 1.0` (negative scores).
+
+### PDF vs image scoring
+
+| | **PDF** | **Image** |
+|---|---|---|
+| **Dense (65%)** | MiniLM (`all-MiniLM-L6-v2`) on text | CLIP (`clip-ViT-B-32`) on pixels |
+| **Sparse (35%)** | BM25 on PDF text | BM25 on OCR caption text |
+| **Build: dense index** | `embeddings.npy` (MiniLM) | `image_embeddings.npy` (CLIP) |
+| **Build: sparse index** | BM25 on `chunk.text` | BM25 on same `chunk.text` (OCR) |
+
+BM25 is one shared index over all chunks. For PDFs, `chunk.text` is extracted PDF text; for images, it is OCR output plus a short header.
+
+**PDF score:**
+
+```
+0.65 × MiniLM(query, pdf_chunk_text) + 0.35 × BM25(query, pdf_chunk_text)
+```
+
+**Image score:**
+
+```
+0.65 × CLIP(query_text, image_pixels) + 0.35 × BM25(query, ocr_caption_text)
+```
+
+Dense scoring for images uses CLIP vision ↔ CLIP text, not MiniLM or OCR. The LLM receives text only (PDF extract or OCR caption), not raw image pixels.
+
 ## Notes
 
 - Rebuild the index after pulling OCR changes: `python scripts/build_index.py --skip-download` (if files are already downloaded).
