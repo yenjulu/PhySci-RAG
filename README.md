@@ -16,7 +16,7 @@ A moderate retrieval-augmented generation (RAG) pipeline built on the [PhySciBen
 physcibench.json + files/*
         │
         ▼
-   PDF chunking (pypdf) + image indexing (CLIP)
+   PDF chunking (pypdf) + image indexing (CLIP + OCR)
         │
         ▼
   Embeddings (MiniLM for text, CLIP for images) + BM25 index
@@ -30,9 +30,22 @@ physcibench.json + files/*
 
 ## Setup
 
+Create and activate a Conda environment, then install Python dependencies:
+
 ```powershell
 cd PhySci-RAG
-py -3 -m pip install -r requirements.txt
+conda env create -f environment.yml
+conda activate physci-rag
+pip install -r requirements.txt
+```
+
+To recreate the environment later:
+
+```powershell
+conda env remove -n physci-rag
+conda env create -f environment.yml
+conda activate physci-rag
+pip install -r requirements.txt
 ```
 
 Copy `.env.example` to `.env` and set `OPENAI_API_KEY` if you want generated answers. Without it, `query.py` still returns retrieved passages.
@@ -45,19 +58,19 @@ Download source PDFs/images and build the vector index:
 
 ```powershell
 # Quick test with the first 10 source files (~few minutes)
-py -3 scripts/build_index.py --download-limit 10
+python scripts/build_index.py --download-limit 10
 
-# Full index (123 PDFs + 18 images — takes longer)
-py -3 scripts/build_index.py
+# Full index (157 PDFs + 18 images — takes longer)
+python scripts/build_index.py
 
 # PDF text only (skip image figures)
-py -3 scripts/build_index.py --pdf-only
+python scripts/build_index.py --pdf-only
 ```
 
-Re-run ingestion only (if PDFs are already downloaded):
+Re-run ingestion only (if source files are already downloaded):
 
 ```powershell
-py -3 scripts/build_index.py --skip-download
+python scripts/build_index.py --skip-download
 ```
 
 ## Query
@@ -65,26 +78,26 @@ py -3 scripts/build_index.py --skip-download
 Ask a free-form question:
 
 ```powershell
-py -3 scripts/query.py "What dopants were studied in CsV3Sb5 STM experiments?"
+python scripts/query.py "What dopants were studied in CsV3Sb5 STM experiments?"
 ```
 
 Run against a specific benchmark item (uses its referenced files as a retrieval filter):
 
 ```powershell
-py -3 scripts/query.py --id physci-001
+python scripts/query.py --id physci-001
 ```
 
 Retrieval only (no LLM):
 
 ```powershell
-py -3 scripts/query.py --id physci-001 --retrieve-only
+python scripts/query.py --id physci-001 --retrieve-only
 ```
 
 List sample benchmark questions:
 
 ```powershell
-py -3 scripts/query.py --list
-py -3 scripts/query.py --list --type multimodal-qa
+python scripts/query.py --list
+python scripts/query.py --list --type multimodal-qa
 ```
 
 ## Python API
@@ -104,26 +117,38 @@ for ctx in result.contexts:
 ```
 physci_rag/
   benchmark.py   # load PhySciBench records
-  download.py    # fetch PDFs from Hugging Face
-  ingest.py      # PDF text extraction + chunking
+  download.py    # fetch PDFs/images from Hugging Face
+  ingest.py      # PDF text extraction, image chunking
+  ocr.py         # OCR (Optical Character Recognition) for figure captions
   store.py       # hybrid vector/BM25 index
   generator.py   # LLM answer generation
   pipeline.py    # high-level RAG interface
 scripts/
   build_index.py
   query.py
+environment.yml  # Conda environment definition
 data/
   physcibench.json
-  files/         # downloaded PDFs
+  files/         # downloaded PDFs and images
   index/         # built index artifacts
 ```
 
+## Image text extraction (OCR)
+
+Benchmark figure images (`.png`, `.jpg`) are not read as pixels by the LLM. Instead, the pipeline uses **OCR (Optical Character Recognition)** to extract visible text such as figure captions, axis labels, and panel markers during indexing.
+
+- **Implementation:** [RapidOCR](https://github.com/RapidAI/RapidOCR) via `rapidocr-onnxruntime`
+- **Module:** `physci_rag/ocr.py`
+- **What OCR captures:** printed caption and label text at indexing time
+- **What OCR does not capture:** chart curves, STM topography patterns, or other purely visual content
+- **Retrieval:** OCR text improves BM25/keyword matching; CLIP embeddings still handle visual similarity
+
+Disable OCR at build time with `--no-ocr` if needed.
+
 ## Notes
 
-- Image figures (`.png`/`.jpg`) are indexed with CLIP embeddings plus OCR caption text (RapidOCR).
-- Rebuild the index after pulling this change: `py -3 scripts/build_index.py --skip-download` (if files are already downloaded).
-- Use `--no-ocr` on `build_index.py` to skip OCR during image ingestion.
-- LLM generation still receives extracted caption text for images, not raw pixels, unless you extend the generator with a vision model.
+- Rebuild the index after pulling OCR changes: `python scripts/build_index.py --skip-download` (if files are already downloaded).
+- LLM generation receives OCR-extracted caption text for images, not raw pixels, unless you extend the generator with a vision model.
 - Hybrid retrieval uses `sentence-transformers/all-MiniLM-L6-v2` for text, `sentence-transformers/clip-ViT-B-32` for images, plus BM25 reranking.
 - PhySciBench is for academic research only. See the dataset card for license restrictions.
 
