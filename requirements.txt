@@ -1,0 +1,7 @@
+numpy>=1.26
+pypdf>=5.0
+huggingface_hub>=0.27
+sentence-transformers>=3.0
+openai>=1.60
+tqdm>=4.66
+rank-bm25>=0.2
