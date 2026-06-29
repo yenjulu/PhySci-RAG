@@ -26,7 +26,9 @@ def format_context(contexts: list[RetrievedContext]) -> str:
   used = 0
   for idx, item in enumerate(contexts, start=1):
     header = f"[{idx}] {item.chunk.source_file}"
-    if item.chunk.page is not None:
+    if item.chunk.content_type == "image":
+      header += " (image figure)"
+    elif item.chunk.page is not None:
       header += f" (page {item.chunk.page})"
     block = f"{header}\n{item.chunk.text}"
     if used + len(block) > MAX_CONTEXT_CHARS:
@@ -79,7 +81,10 @@ def _fallback_answer(question: str, contexts: list[RetrievedContext]) -> str:
     preview = item.chunk.text[:500]
     if len(item.chunk.text) > 500:
       preview += "..."
-    lines.append(
-      f"{idx}. [{item.chunk.source_file}, page {item.chunk.page}, score={item.score:.3f}] {preview}"
-    )
+    location = item.chunk.source_file
+    if item.chunk.content_type == "image":
+      location += ", image figure"
+    elif item.chunk.page is not None:
+      location += f", page {item.chunk.page}"
+    lines.append(f"{idx}. [{location}, score={item.score:.3f}] {preview}")
   return "\n".join(lines)

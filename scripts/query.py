@@ -54,10 +54,12 @@ def main() -> None:
   print(result.answer)
   print("\nSources:")
   for idx, item in enumerate(result.contexts, start=1):
-    print(
-      f"  {idx}. {item.chunk.source_file} "
-      f"(page {item.chunk.page}, score={item.score:.3f})"
-    )
+    label = item.chunk.source_file
+    if item.chunk.content_type == "image":
+      label += " (image figure)"
+    elif item.chunk.page is not None:
+      label += f" (page {item.chunk.page})"
+    print(f"  {idx}. {label} (score={item.score:.3f})")
   if result.ground_truth:
     print("\nGround truth (benchmark):")
     print(result.ground_truth[:1200])

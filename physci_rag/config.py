@@ -9,6 +9,8 @@ BENCHMARK_JSON = DATA_DIR / "physcibench.json"
 HF_DATASET_REPO = "yigengx/PhySciBench"
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+IMAGE_EMBEDDING_MODEL = "sentence-transformers/clip-ViT-B-32"
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 CHUNK_SIZE = 900
 CHUNK_OVERLAP = 150
 TOP_K = 6

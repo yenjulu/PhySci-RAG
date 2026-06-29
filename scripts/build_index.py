@@ -17,25 +17,30 @@ def main() -> None:
     "--download-limit",
     type=int,
     default=None,
-    help="Download only the first N referenced PDFs (useful for quick testing).",
+    help="Download only the first N referenced source files (useful for quick testing).",
   )
   parser.add_argument(
-    "--include-images",
+    "--pdf-only",
     action="store_true",
-    help="Also download image files (not used for indexing).",
+    help="Download and index PDF text only, skip image figures.",
   )
   parser.add_argument(
     "--skip-download",
     action="store_true",
-    help="Only ingest PDFs already present in data/files/.",
+    help="Only ingest source files already present in data/files/.",
   )
   args = parser.parse_args()
 
   if not args.skip_download:
-    download_files(limit=args.download_limit, pdf_only=not args.include_images)
+    download_files(limit=args.download_limit, pdf_only=args.pdf_only)
 
-  chunks = ingest_local_files()
-  print(f"Ingested {len(chunks)} chunks from local PDFs.")
+  chunks = ingest_local_files(include_images=not args.pdf_only)
+  text_count = sum(1 for chunk in chunks if chunk.content_type == "text")
+  image_count = sum(1 for chunk in chunks if chunk.content_type == "image")
+  print(
+    f"Ingested {len(chunks)} chunks "
+    f"({text_count} text, {image_count} image) from local source files."
+  )
 
   store = VectorStore()
   store.build(chunks)

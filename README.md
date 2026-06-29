@@ -6,20 +6,20 @@ A moderate retrieval-augmented generation (RAG) pipeline built on the [PhySciBen
 
 1. Loads the 200 PhySciBench benchmark records from `data/physcibench.json`
 2. Downloads referenced source PDFs from Hugging Face
-3. Chunks and indexes paper text with hybrid retrieval (dense embeddings + BM25)
+3. Chunks and indexes paper text plus benchmark figure images with hybrid retrieval (dense embeddings + BM25)
 4. Retrieves relevant passages for a question
 5. Generates an answer with an OpenAI-compatible LLM (or returns retrieval-only output without an API key)
 
 ## Architecture
 
 ```
-physcibench.json + files/*.pdf
+physcibench.json + files/*
         │
         ▼
-   PDF chunking (pypdf)
+   PDF chunking (pypdf) + image indexing (CLIP)
         │
         ▼
-  Embeddings (MiniLM) + BM25 index
+  Embeddings (MiniLM for text, CLIP for images) + BM25 index
         │
         ▼
   Hybrid retrieval (top-k)
@@ -41,14 +41,17 @@ The benchmark JSON is already included in `data/physcibench.json`.
 
 ## Build the index
 
-Download source PDFs and build the vector index:
+Download source PDFs/images and build the vector index:
 
 ```powershell
-# Quick test with the first 10 PDFs (~few minutes)
+# Quick test with the first 10 source files (~few minutes)
 py -3 scripts/build_index.py --download-limit 10
 
-# Full index (123 PDFs, ~509 MB download — takes longer)
+# Full index (123 PDFs + 18 images — takes longer)
 py -3 scripts/build_index.py
+
+# PDF text only (skip image figures)
+py -3 scripts/build_index.py --pdf-only
 ```
 
 Re-run ingestion only (if PDFs are already downloaded):
@@ -117,8 +120,10 @@ data/
 
 ## Notes
 
-- Image-only benchmark items (`.png`/`.jpg`) are not indexed in this version; PDF text is the primary retrieval source.
-- Hybrid retrieval uses `sentence-transformers/all-MiniLM-L6-v2` plus BM25 reranking.
+- Image figures (`.png`/`.jpg`) are indexed with CLIP embeddings for retrieval; PDF passages use MiniLM text embeddings.
+- Rebuild the index after pulling this change: `py -3 scripts/build_index.py --skip-download` (if files are already downloaded).
+- LLM generation still receives image metadata text, not raw pixels, unless you extend the generator with a vision model.
+- Hybrid retrieval uses `sentence-transformers/all-MiniLM-L6-v2` for text, `sentence-transformers/clip-ViT-B-32` for images, plus BM25 reranking.
 - PhySciBench is for academic research only. See the dataset card for license restrictions.
 
 ## Citation
