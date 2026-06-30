@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from pypdf import PdfReader
+import fitz
 
 from .benchmark import file_to_record_ids, load_benchmark
 from .config import CHUNK_OVERLAP, CHUNK_SIZE, FILES_DIR, IMAGE_EXTENSIONS, OCR_ENABLED
@@ -19,36 +19,119 @@ class DocumentChunk:
     content_type: str = "text"
 
 
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+_ACRONYM_GLUE = re.compile(r"([a-z]{4,})([A-Z][A-Z0-9]+)")
+_STUCK_LABEL = re.compile(r"(\w)(Fig\.|Table\.|Eq\.)")
+_BRACKET_GLUE = re.compile(r"([\)\]\}])([A-Za-z])")
+_HYPHEN_BREAK = re.compile(r"(\w)-\s+(\w)")
+
+
 def _normalize_whitespace(text: str) -> str:
     text = text.replace("\x00", " ")
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
+def _repair_pdf_text(text: str) -> str:
+    text = _HYPHEN_BREAK.sub(r"\1\2", text)
+    text = _BRACKET_GLUE.sub(r"\1 \2", text)
+    text = _ACRONYM_GLUE.sub(r"\1 \2", text)
+    text = _STUCK_LABEL.sub(r"\1 \2", text)
+    return _normalize_whitespace(text)
+
+
+def _split_oversized_segment(text: str, chunk_size: int) -> list[str]:
+    words = text.split()
+    if not words:
+        return []
+
+    pieces: list[str] = []
+    current: list[str] = []
+    length = 0
+
+    for word in words:
+        add = len(word) + (1 if current else 0)
+        if current and length + add > chunk_size:
+            pieces.append(" ".join(current))
+            current = [word]
+            length = len(word)
+        else:
+            current.append(word)
+            length += add
+
+    if current:
+        pieces.append(" ".join(current))
+    return pieces
+
+
+def _split_sentences(text: str, chunk_size: int) -> list[str]:
+    sentences: list[str] = []
+    for part in _SENTENCE_BOUNDARY.split(text):
+        part = part.strip()
+        if not part:
+            continue
+        if len(part) <= chunk_size:
+            sentences.append(part)
+        else:
+            sentences.extend(_split_oversized_segment(part, chunk_size))
+    return sentences
+
+
 def _split_text(text: str, chunk_size: int, overlap: int) -> list[str]:
-    if not text:
+    units = _split_sentences(text, chunk_size)
+    if not units:
         return []
 
     chunks: list[str] = []
     start = 0
-    while start < len(text):
-        end = min(start + chunk_size, len(text))
-        chunk = text[start:end].strip()
+
+    while start < len(units):
+        length = 0
+        end = start
+        while end < len(units):
+            piece = units[end]
+            add = len(piece) + (1 if end > start else 0)
+            if length + add > chunk_size and end > start:
+                break
+            length += add
+            end += 1
+
+        chunk = " ".join(units[start:end]).strip()
         if chunk:
             chunks.append(chunk)
-        if end >= len(text):
+
+        if end >= len(units):
             break
-        start = max(end - overlap, start + 1)
+
+        if overlap <= 0:
+            start = end
+            continue
+
+        overlap_start = end
+        overlap_len = 0
+        while overlap_start > start:
+            overlap_start -= 1
+            piece = units[overlap_start]
+            overlap_len += len(piece) + (1 if overlap_start < end - 1 else 0)
+            if overlap_len >= overlap:
+                break
+
+        next_start = max(overlap_start, start + 1)
+        if next_start >= end:
+            start = end
+        else:
+            start = next_start
+
     return chunks
 
 
 def extract_pdf_text(path: Path) -> list[tuple[int, str]]:
-    reader = PdfReader(str(path))
     pages: list[tuple[int, str]] = []
-    for page_number, page in enumerate(reader.pages, start=1):
-        text = _normalize_whitespace(page.extract_text() or "")
-        if text:
-            pages.append((page_number, text))
+    with fitz.open(str(path)) as doc:
+        for page_number, page in enumerate(doc, start=1):
+            text = _repair_pdf_text(page.get_text("text") or "")
+            if text:
+                pages.append((page_number, text))
     return pages
 
 

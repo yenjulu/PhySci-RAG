@@ -16,7 +16,7 @@ A moderate retrieval-augmented generation (RAG) pipeline built on the [PhySciBen
 physcibench.json + files/*
         │
         ▼
-   PDF chunking (pypdf) + image indexing (CLIP + OCR)
+   PDF chunking (PyMuPDF + sentence-aware splits) + image indexing (CLIP + OCR)
         │
         ▼
   Embeddings (MiniLM for text, CLIP for images) + BM25 index
@@ -118,7 +118,7 @@ for ctx in result.contexts:
 physci_rag/
   benchmark.py   # load PhySciBench records
   download.py    # fetch PDFs/images from Hugging Face
-  ingest.py      # PDF text extraction, image chunking
+  ingest.py      # PDF text extraction (PyMuPDF), sentence-aware chunking
   ocr.py         # OCR (Optical Character Recognition) for figure captions
   store.py       # hybrid vector/BM25 index
   generator.py   # LLM answer generation
